@@ -1,85 +1,224 @@
 
 import csv
+import os
 import time
 from collections import defaultdict, deque
+from pathlib import Path
 
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, CONFIG_DISPATCHER, set_ev_cls
 from ryu.ofproto import ofproto_v1_3
-from ryu.lib import hub
 from ryu.lib.packet import packet, ethernet, ipv4, udp
+from ryu.lib import hub
 
 
-class DOSDefenseV2(app_manager.RyuApp):
+class DOSDefense(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     AP2_DPID = 0x1000000000000002
     WINDOW_SECONDS = 5
     BASE_THRESHOLD = 120
     METER_RATE_KBPS = 500
+
     ATTACKER_IP = "10.0.0.3"
     DESTINATION_IP = "10.0.0.2"
 
+    HANDOVER_WINDOW_SECONDS = 60
+    HIGH_HANDOVER_RATE = 2.0
+    HANDOVER_POLL_SECONDS = 2
+
     def __init__(self, *args, **kwargs):
-        super(DOSDefenseV2, self).__init__(*args, **kwargs)
+        super(DOSDefense, self).__init__(*args, **kwargs)
+
         self.mac_to_port = defaultdict(dict)
         self.datapaths = {}
         self.packet_times = defaultdict(deque)
         self.trust = defaultdict(lambda: 1.0)
         self.stage = defaultdict(int)
+
         self.start_time = time.time()
-        self.mobility_rows = []
-        self.load_mobility()
-        self.block_refresh_thread = hub.spawn(self.refresh_blocks)
+        self.mobility_data = self.load_mobility()
+
+        self.handover_path = (
+            Path(__file__).resolve().parents[1]
+            / "handover_test"
+            / "handover_log.csv"
+        )
+
+        self.handover_events = deque()
+        self.seen_handovers = set()
+        self.handover_rate = 0.0
+        self.last_handover_check = 0
+
+        self.logger.info(
+            "Handover CSV path: %s",
+            self.handover_path
+        )
+
+        hub.spawn(self.refresh_blocks)
+        hub.spawn(self.monitor_handovers)
 
     def load_mobility(self):
         path = "/home/ev/sdn_vanet_sumo/mobility_features.csv"
+        data = []
+
+        if not os.path.exists(path):
+            self.logger.warning("Mobility CSV not found: %s", path)
+            return data
+
         try:
             with open(path, newline="") as file:
-                self.mobility_rows = list(csv.DictReader(file))
+                reader = csv.DictReader(file)
+
+                for row in reader:
+                   data.append({
+                       "time": float(row["time"]),
+                       "vehicle_count": int(row["vehicle_count"]),
+                       "avg_speed": float(row["average_speed"])
+                   })
+
             self.logger.info(
-                "Loaded %s SUMO mobility records",
-                len(self.mobility_rows)
+                "Loaded %s mobility records",
+                len(data)
             )
-        except (OSError, csv.Error) as error:
-            self.logger.warning("Mobility data unavailable: %s", error)
+
+        except (OSError, ValueError, KeyError) as error:
+            self.logger.error("Mobility CSV error: %s", error)
+
+        return data
 
     def get_threshold(self):
         threshold = self.BASE_THRESHOLD
-        if not self.mobility_rows:
-            return threshold
 
-        elapsed = time.time() - self.start_time
-        try:
-            row = min(
-                self.mobility_rows,
-                key=lambda item: abs(float(item["time"]) - elapsed)
+        if self.mobility_data:
+            elapsed = time.time() - self.start_time
+
+            nearest = min(
+                self.mobility_data,
+                key=lambda row: abs(row["time"] - elapsed)
             )
-            count = int(row["vehicle_count"])
-            speed = float(row["average_speed"])
+
+            count = nearest["vehicle_count"]
+            speed = nearest["avg_speed"]
 
             if count >= 5 or speed < 5:
                 threshold = 90
             elif count <= 2 and speed >= 10:
                 threshold = 150
-        except (KeyError, TypeError, ValueError):
-            self.logger.warning("Invalid mobility record; using base threshold")
+
+        now = time.time()
+
+        while (
+            self.handover_events
+            and now - self.handover_events[0] > self.HANDOVER_WINDOW_SECONDS
+        ):
+            self.handover_events.popleft()
+
+        self.handover_rate = (
+            len(self.handover_events)
+            * 60.0
+            / self.HANDOVER_WINDOW_SECONDS
+        )
+
+        if self.handover_rate >= self.HIGH_HANDOVER_RATE:
+            threshold = max(threshold, 150)
 
         return threshold
 
-    def add_flow(self, datapath, priority, match, actions=None,
-                 instructions=None, hard_timeout=0):
+    def monitor_handovers(self):
+        while True:
+            try:
+                if self.handover_path.exists():
+                    with open(
+                        self.handover_path,
+                        newline=""
+                    ) as file:
+                        reader = csv.DictReader(file)
+
+                        for row in reader:
+                            if row.get("current_ap") in (None, "", "NONE"):
+                                continue
+
+                            if row.get("previous_ap") in (None, "", "NONE"):
+                                continue
+
+                            try:
+                                timestamp = float(row["timestamp_unix"])
+                            except (ValueError, KeyError, TypeError):
+                                continue
+
+                            handover_id = (
+                                timestamp,
+                                row.get("station", ""),
+                                row.get("previous_ap", ""),
+                                row.get("current_ap", "")
+                            )
+
+                            if handover_id in self.seen_handovers:
+                                continue
+
+                            self.seen_handovers.add(handover_id)
+                            self.handover_events.append(timestamp)
+
+                            self.logger.info(
+                                "Handover observed: %s -> %s at %.3f",
+                                row.get("previous_ap"),
+                                row.get("current_ap"),
+                                timestamp
+                            )
+
+                now = time.time()
+
+                while (
+                    self.handover_events
+                    and now - self.handover_events[0]
+                    > self.HANDOVER_WINDOW_SECONDS
+                ):
+                    self.handover_events.popleft()
+
+                self.handover_rate = (
+                    len(self.handover_events)
+                    * 60.0
+                    / self.HANDOVER_WINDOW_SECONDS
+                )
+
+                if now - self.last_handover_check >= 10:
+                    self.logger.info(
+                        "Recent handovers=%s; handover rate=%.2f/min",
+                        len(self.handover_events),
+                        self.handover_rate
+                    )
+                    self.last_handover_check = now
+
+            except (OSError, csv.Error) as error:
+                self.logger.warning(
+                    "Could not read handover CSV: %s",
+                    error
+                )
+
+            hub.sleep(self.HANDOVER_POLL_SECONDS)
+
+    def add_flow(
+        self,
+        datapath,
+        priority,
+        match,
+        actions=None,
+        instructions=None,
+        hard_timeout=0
+    ):
         parser = datapath.ofproto_parser
+        ofproto = datapath.ofproto
 
         if instructions is None:
             actions = actions or []
             instructions = [
                 parser.OFPInstructionActions(
-                    datapath.ofproto.OFPIT_APPLY_ACTIONS,
+                    ofproto.OFPIT_APPLY_ACTIONS,
                     actions
                 )
-            ] if actions else []
+            ]
 
         flow = parser.OFPFlowMod(
             datapath=datapath,
@@ -88,6 +227,7 @@ class DOSDefenseV2(app_manager.RyuApp):
             instructions=instructions,
             hard_timeout=hard_timeout
         )
+
         datapath.send_msg(flow)
 
     def install_meter(self, datapath, source_ip):
@@ -135,6 +275,7 @@ class DOSDefenseV2(app_manager.RyuApp):
 
     def install_temporary_block(self, datapath, source_ip):
         parser = datapath.ofproto_parser
+
         match = parser.OFPMatch(
             in_port=1,
             eth_type=0x0800,

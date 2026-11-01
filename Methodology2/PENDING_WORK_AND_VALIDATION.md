@@ -14,7 +14,7 @@ privileged wireless runtime was not available in the preparation environment.
 * Sliding-window rate estimation with a corrected early-window divisor.
 * Progressive-mitigation decision state machine (Stage 0→1→2, hold, and
   reset/recovery) with unit tests.
-* 45 unittest cases + the 5 original check scripts all pass:
+* 65 unittest cases + the 5 original check scripts all pass:
   `bash Methodology2/run_tests.sh`.
 
 ## Source-level fixes that STILL require live confirmation
@@ -23,11 +23,18 @@ privileged wireless runtime was not available in the preparation environment.
    output `port=2` on AP2 by default. Confirm against
    `ovs-ofctl -O OpenFlow13 show ap2` and set `DOS_AP2_IN_PORT` /
    `DOS_AP2_OUT_PORT` before interpreting mitigation behaviour.
-2. **Stage 1 meter enforcement.** The committed `final_evidence/final_meter_stats.txt`
-   reports `flow_count: 0` and zero meter counters. The meter flow now also
-   mirrors matching packets to the controller so rate observation continues and
-   Stage 2 can escalate, but a fresh run must show a matching meter flow with
-   non-zero counters while legitimate traffic stays usable.
+2. **Stage 1 meter enforcement and counter semantics.** The committed
+   `final_evidence/final_meter_stats.txt` reports `flow_count: 0` and zero meter
+   counters. Stage 1 now forwards only to the victim; the controller polls the
+   cookie-scoped priority-60 flow approximately once per second and uses packet
+   counter deltas for escalation. OpenFlow defines flow counters as counters for
+   matched entries before instructions, but whether the target OVS datapath
+   exposes those counters as the desired raw ingress signal must be confirmed
+   live. Meter and band counters are validation telemetry only and are never
+   used as per-source evidence. A fresh run must show the matching flow, stable
+   counter deltas, and (when supported) per-active-meter statistics; telemetry
+   is round-robin and never used as per-source evidence. Confirm usable
+   legitimate traffic.
 3. **Stage 2 expiry and recovery.** The indefinite 20 s re-block was removed and
    replaced with a self-expiring block plus a detector reset. Confirm with a
    live attack that the drop counters rise during the attack and that traffic
@@ -49,6 +56,14 @@ privileged wireless runtime was not available in the preparation environment.
 6. **Mobility input is a static trace.** The shipped/produced feature CSV is a
    recorded trace, not evidence that the controller is receiving live mobility
    updates.
+
+7. **OpenFlow statistics compatibility.** The controller uses standard
+   OpenFlow 1.3 flow and meter statistics requests, multipart replies,
+   controller-owned cookies, and a one-second default poll interval.
+   Ryu/OVS versions can differ in optional meter-stat support and counter
+   offload semantics. Verify `dump-flows`, `meter-stats`, and observed counter
+   deltas on the target OVS version before claiming raw-ingress-rate
+   measurements.
 
 ## Required live validation before claiming completion
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Run every test that does NOT require the live SDN/SUMO runtime.
 #
-# These tests cover the pure-Python logic: Paillier crypto, privacy-preserving
-# aggregation, DoS evidence scoring, mobility-aware detection and the
-# progressive-mitigation decision state machine. They need only the Python
-# standard library (no third-party packages, no Ryu/Mininet/SUMO).
+# These tests cover the runtime-independent logic plus the mocked Ryu adapter:
+# Paillier crypto, privacy-preserving aggregation, DoS evidence scoring,
+# mobility-aware detection, progressive mitigation, and OpenFlow polling. They
+# need only the Python standard library (no Ryu/Mininet/SUMO).
 #
 # Usage:  bash Methodology2/run_tests.sh
 set -euo pipefail

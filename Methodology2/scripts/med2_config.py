@@ -102,6 +102,8 @@ class Med2Config:
     # intent, instead of jumping to a block on the next packet. Keep it below
     # meter_hard_timeout so the meter flow is still present during the dwell.
     stage1_dwell_seconds: float = 10.0
+    # [DOS_STATS_POLL_SECONDS]  Periodic OpenFlow flow/meter statistics poll.
+    stats_poll_seconds: float = 1.0
     # [DOS_STAGE2_BLOCK_SECONDS]  Stage 2 temporary drop duration (s).
     stage2_block_seconds: int = 30
     # [DOS_DETECTOR_RESET_SECONDS]  Idle gap after a block expires before the
@@ -169,6 +171,9 @@ class Med2Config:
         )
         cfg.stage1_dwell_seconds = _env_float(
             "DOS_STAGE1_DWELL_SECONDS", cfg.stage1_dwell_seconds
+        )
+        cfg.stats_poll_seconds = _env_float(
+            "DOS_STATS_POLL_SECONDS", cfg.stats_poll_seconds
         )
         cfg.stage2_block_seconds = _env_int(
             "DOS_STAGE2_BLOCK_SECONDS", cfg.stage2_block_seconds

@@ -17,6 +17,7 @@ from mininet.log import setLogLevel, info
 from mn_wifi.cli import CLI
 from mn_wifi.net import Mininet_wifi
 from mininet.node import RemoteController, OVSSwitch
+from handover_tracker import HandoverTracker
 
 OUTPUT = (
     Path(__file__).resolve().parents[1]
@@ -251,11 +252,7 @@ def topology():
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 
     stop_monitor = threading.Event()
-    handover_state = {
-        'previous_ap': None,
-        'pending_departure': None,
-        'handovers': 0
-    }
+    handover_state = HandoverTracker()
 
     start_time = time.time()
 
@@ -275,7 +272,7 @@ def topology():
 
     def monitor_association():
         current_ap = get_associated_ap()
-        handover_state['previous_ap'] = current_ap
+        handover_state.observe(current_ap, time.time())
 
         with open(OUTPUT, 'w', newline='', buffering=1) as file:
             writer = csv.writer(file)
@@ -302,62 +299,29 @@ def topology():
             while not stop_monitor.is_set():
                 try:
                     new_ap = get_associated_ap()
-                    old_ap = handover_state['previous_ap']
-
-                    if new_ap != old_ap:
-                        now = time.time()
+                    now = time.time()
+                    transition = handover_state.observe(new_ap, now)
+                    if transition is not None:
+                        old_ap, current_ap, handover_count, completed = transition
                         elapsed = now - start_time
-                        handover_count = 0
-
-                        if new_ap == 'NONE':
-                            handover_state['pending_departure'] = (
-                                old_ap,
-                                now
-                            )
-
-                        elif handover_state['pending_departure'] is not None:
-                            departed_ap, departed_time = (
-                                handover_state['pending_departure']
-                            )
-
-                            if (
-                                 new_ap != departed_ap
-                                 and now - departed_time <= 5 
-                            ):
-                                handover_state['handovers'] += 1
-                                handover_count = handover_state['handovers']
-
-                                writer.writerow([
-                                    f'{now:.3f}',
-                                    f'{elapsed:.3f}',
-                                    'sta1',
-                                    departed_ap,
-                                    new_ap,
-                                    handover_count
-                                ])
-
-                                info(
-                                    f"*** HANDOVER: sta1 {departed_ap} "
-                                    f"-> {new_ap}; total="
-                                    f"{handover_count}\n"
-                                )
-
-                            handover_state['pending_departure'] = None
-
                         writer.writerow([
                             f'{now:.3f}',
                             f'{elapsed:.3f}',
                             'sta1',
                             old_ap,
-                            new_ap,
+                            current_ap,
                             handover_count
                         ])
-
-                        info(
-                            f"*** Association change: sta1 "
-                            f"{old_ap} -> {new_ap}\n"
-                        )
-                        handover_state['previous_ap'] = new_ap
+                        if completed:
+                            info(
+                                f"*** HANDOVER: sta1 {old_ap} -> {current_ap}; "
+                                f"total={handover_count}\n"
+                            )
+                        else:
+                            info(
+                                f"*** Association change: sta1 "
+                                f"{old_ap} -> {current_ap}\n"
+                            )
 
                     stop_monitor.wait(0.2)
 
@@ -383,7 +347,7 @@ def topology():
         net.stop()
 
     print("Handover log:", OUTPUT)
-    print("Observed completed handovers:", handover_state['handovers'])
+    print("Observed completed handovers:", handover_state.handovers)
 
 
 if __name__ == '__main__':

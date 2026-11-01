@@ -16,7 +16,7 @@ A concise, honest status of each MED-2 feature after this revision. Legend:
 | Mobility-aware threshold policy (`select_threshold`) | Done (tested here) | Dense/slow lowers, sparse/fast raises, handover floor; mobility never alone implies attack. |
 | Sliding-window rate (`PacketRateTracker`) | Done (tested here) | Observed-duration divisor fixes early-window underestimate. |
 | Progressive-mitigation decision logic (`decide`) | Done (tested here) | Stage 0→1→2, no false escalation, block hold, reset/recovery after expiry. |
-| Ryu controller wiring (`dos_defense_v2.py`) | Done (source) | Uses config + detector; Stage 1 meter now also mirrors to controller so Stage 2 can trigger; broken 20 s re-block removed; disconnect/error handlers added; duplicate-meter guard. Needs testbed. |
+| Ryu controller wiring (`dos_defense_v2.py`) | Done (source) | Stage 1 forwards only to the victim; controller-owned cookies and periodic OpenFlow flow statistics drive Stage 2 without per-packet mirroring. Meter statistics are telemetry only. Needs live OVS validation. |
 | Two-AP topology (`sdn_vanet_2ap.py`) | Done (source) | Removed the asymmetric manual `add-port ap1 ap1-wlan1`; controller endpoint configurable. Needs testbed. |
 | Connectivity / packet-path diagnosis (`connectivity_test.py`) | Done (source) | Read-only structured diagnosis of bridge membership, controller state, flows, ARP, ping path. Needs testbed. |
 | Paillier crypto (`paillier_crypto.py`) | Done (tested here) | sympy dependency removed (stdlib Miller-Rabin); encode/decode, scalar add, aggregate added; input validation. |
@@ -25,7 +25,7 @@ A concise, honest status of each MED-2 feature after this revision. Legend:
 | Urban + highway scenarios (`scenarios/`) | Scaffolded | Valid SUMO node/edge/route/sumocfg + build script; `.net.xml` must be built with netconvert; traces need SUMO. |
 | Experiment matrix (`EXPERIMENTS.md`) | Scaffolded | Exact commands for all 10 rows; crypto rows executed here, network rows require the testbed. |
 | Benchmarks (`results/`) | Done (tested here) | Real measured crypto micro-benchmarks; written to `results/`, not over committed evidence. |
-| Automated tests (`tests/`, `run_tests.sh`) | Done (tested here) | 45 unittest cases + 5 original check scripts, all passing. |
+| Automated tests (`tests/`, `run_tests.sh`) | Done (tested here) | 65 unittest cases + 5 original check scripts, all passing. |
 
 ## What is explicitly NOT claimed
 

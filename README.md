@@ -198,8 +198,8 @@ The revised manuscript contains the background, experimental design, results, di
 
 ## 9. Authors and repository
 
-- **Jim Mathew K** — 24BCE0493
-- **Vignesh Ekambaram** — 24BCE0651
+- **Jim Mathew K** 
+- **Vignesh Ekambaram** 
 - **Institution:** School of Computer Science and Engineering, Vellore Institute of Technology, Vellore, India
 - **Repository:** https://github.com/jimmathewk21/MarsVanet
 

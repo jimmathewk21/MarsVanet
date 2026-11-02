@@ -4,7 +4,7 @@
 
 **Computer Networks project | Team 14 | Vellore Institute of Technology, Vellore**
 
-**Authors:** Jim Mathew K (24BCE0493) and Vignesh Ekambaram (24BCE0651)
+**Authors:** Jim Mathew K and Vignesh Ekambaram
 
 MarsVanet is an experimental **software-defined vehicular ad hoc network (SDN-VANET)** security project. It investigates how different OpenFlow policies affect suspicious UDP traffic in a small Mininet-WiFi network, while measuring whether legitimate traffic remains deliverable.
 

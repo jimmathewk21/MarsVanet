@@ -8,16 +8,7 @@
 
 MarsVanet is an experimental **software-defined vehicular ad hoc network (SDN-VANET)** security project. It investigates how different OpenFlow policies affect suspicious UDP traffic in a small Mininet-WiFi network, while measuring whether legitimate traffic remains deliverable.
 
-The repository contains **three separately implemented defense methodologies**, a benchmark harness, and a Windows-first [VisualUnified application](VisualUnified/README.md). The original methodologies remain separate experiments; VisualUnified combines their concepts in an explicitly labeled software simulation.
-
-To run the visual application in PowerShell (Python 3.10 or newer, standard library only):
-
-```powershell
-cd C:\Users\jimk7\Desktop\Projects\ComputerNetworks\MarsVanet
-python VisualUnified\run.py
-```
-
-Open `http://127.0.0.1:8765`. The visual application simulates network forwarding and security decisions; its exports are separate from the historical Mininet/OVS measurements below. See [VisualUnified's integration review](VisualUnified/docs/REVIEW_AND_VALIDATION.md) for fixes, validation, and limitations.
+The repository contains **three separately implemented defense methodologies**, plus a benchmark harness. These are **alternative experiments**, **not a single integrated production controller**.
 
 > **Research scope:** Controlled emulation with three stations, two access points, a software switch, and a Ryu controller. Results are specific to the stated workloads and do not establish production readiness.
 
